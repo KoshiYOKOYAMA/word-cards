@@ -138,6 +138,7 @@ body{margin:0}
 
 <script>
 (() => {
+const APP_VERSION = "3";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -378,6 +379,7 @@ function renderAdd(){
         <button class="ghost" id="backup" ${state.cards.length?"":"disabled"}>バックアップをコピー（${state.cards.length}語）</button>
         <p class="note" id="backup-msg"></p>
       </div>
+      <p class="note" style="text-align:center">アプリのバージョン ${APP_VERSION}</p>
     </div>`;
   $("#import").onclick = () => {
     const msg = $("#import-msg");
