@@ -138,7 +138,7 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "3";
+const APP_VERSION = "4";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -368,9 +368,11 @@ function renderAdd(){
       <div class="panel">
         <span class="h2">単語を読み込む</span>
         <p class="note" style="margin:0">1. <a href="${ADD_URL}" target="_blank" rel="noopener">単語を作るアプリ</a>（claude.ai）で単語を追加<br>2. そのアプリの「単語リスト」で「復習版に送る」を押す<br>3. 下の枠に貼り付けて「読み込む」</p>
+        <button class="primary" id="paste-import">貼り付けて読み込む</button>
+        <p class="note" style="margin:0">うまくいかないときは、下の枠に手で貼り付けて「読み込む」を押してください。</p>
         <div class="field"><label for="f-code">コピーしたコード</label>
           <textarea id="f-code" rows="4" placeholder="ここを長押しして「ペースト」" autocapitalize="off" spellcheck="false"></textarea></div>
-        <button class="primary" id="import">読み込む</button>
+        <button class="ghost" id="import">読み込む</button>
         <p class="note" id="import-msg">すでにある単語は、覚えた状況（完璧・あいまい・忘れた）をそのまま残します。</p>
       </div>
       <div class="panel">
@@ -381,7 +383,16 @@ function renderAdd(){
       </div>
       <p class="note" style="text-align:center">アプリのバージョン ${APP_VERSION}</p>
     </div>`;
-  $("#import").onclick = () => {
+  $("#paste-import").onclick = async () => {
+    const msg = $("#import-msg");
+    let text = "";
+    try { text = await navigator.clipboard.readText(); }
+    catch(e){ msg.innerHTML = `<span class="err">自動で貼り付けできませんでした。下の枠を長押しして「ペースト」を押し、「読み込む」を押してください。</span>`; return; }
+    $("#f-code").value = text;
+    runImport();
+  };
+  $("#import").onclick = runImport;
+  function runImport(){
     const msg = $("#import-msg");
     try {
       const r = importCode($("#f-code").value);
@@ -401,11 +412,15 @@ function renderAdd(){
   $("#backup").onclick = async () => {
     const code = "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, s:k.s})));
     const msg = $("#backup-msg");
-    try { await navigator.clipboard.writeText(code); msg.textContent = "コピーしました。メモアプリなどに貼っておいてください。"; }
-    catch(e){
-      msg.innerHTML = `下の枠を長押しして「すべてを選択」→「コピー」してください。<textarea id="backup-box" rows="3" readonly></textarea>`;
-      const box = $("#backup-box"); box.value = code; box.focus(); box.select();
-    }
+    // select-all-and-copy, the way that works by hand on iPhone
+    msg.innerHTML = `<span id="backup-status"></span><textarea id="backup-box" rows="3" style="margin-top:6px;font-size:12px" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>`;
+    const box = $("#backup-box"); box.value = code;
+    box.focus(); box.select(); box.setSelectionRange(0, code.length);
+    let copied = false;
+    try { copied = document.execCommand("copy"); } catch(e){}
+    if (!copied){ try { await navigator.clipboard.writeText(code); copied = true; } catch(e){} }
+    box.blur();
+    $("#backup-status").textContent = copied ? "コピーしました。メモアプリなどに貼っておいてください。" : "下の枠を長押しして「すべてを選択」→「コピー」してください。";
   };
 }
 
