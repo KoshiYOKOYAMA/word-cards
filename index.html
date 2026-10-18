@@ -69,6 +69,7 @@ button{font:inherit;color:inherit}
   background-position:0 0,0 54px;display:flex;flex-direction:column;gap:10px}
 .card .top{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)}
 .chip{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+.chip.look{background:transparent;color:var(--accent);border:1px solid var(--accent);white-space:nowrap}
 .chip.ok{background:var(--ok-bg);color:var(--ok)} .chip.meh{background:var(--meh-bg);color:var(--meh)} .chip.ng{background:var(--ng-bg);color:var(--ng)} .chip.new{background:var(--new-bg);color:var(--new)}
 .word{font-family:var(--font-word);font-size:clamp(30px,9vw,42px);font-weight:700;line-height:1.15;margin:18px 0 0;overflow-wrap:anywhere;text-wrap:balance}
 .word.sent{font-size:clamp(19px,5.5vw,24px);font-weight:500;line-height:1.5;text-wrap:pretty}
@@ -149,7 +150,7 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "11";
+const APP_VERSION = "12";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -186,7 +187,7 @@ function addExample(text){
   text = str(text).trim(); if (!text) return;
   state.pending = state.pending || [];
   if (!state.pending.includes(text)) state.pending.push(text);
-  if (state.cards.some(c => c.w.toLowerCase() === text.toLowerCase())){ save(); return toast("この例文はもうカードにあります"); }
+  { const same = findCard(text); if (same){ bumpLook(same); save(); if (ui.tab === "list") renderList(); return toast(`この例文はもうカードにあります（調べた ${looks(same)}回）`); } }
   state.cards.push({id:uid(), w:text, kind:"sentence", ja:"", def:"", exS:"", exR:"", fam:"", s:"new", n:0, t:0});
   save();
   if (ui.tab === "list") renderList();
@@ -201,6 +202,10 @@ function copyText(text, statusEl){
   box.remove();
   return ok ? Promise.resolve(true) : (navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false));
 }
+// how many times this card has been added (looked up); every duplicate add counts once more
+const looks = k => k.look || 1;
+function bumpLook(k){ k.look = looks(k) + 1; k.lastLook = Date.now(); }
+const findCard = w => state.cards.find(c => c.w.toLowerCase() === String(w).trim().toLowerCase());
 const famHtml = f => String(f).split(/\s*\/\s*|\n/).filter(Boolean).map(esc).join("<br>");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const toast = msg => { const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.h);
@@ -317,7 +322,7 @@ function renderStudy(){
     <div style="display:flex;flex-direction:column;gap:12px">
       <div class="progress"><span>${s.i+1} / ${s.ids.length}</span><button class="speak" id="quit">やめる</button></div>
       <div class="card" id="card" tabindex="0" role="button" aria-label="タップで答えを見る">
-        <div class="top"><span class="chip ${k.s}">${LABEL[k.s]}</span><span class="row" style="gap:6px"><button class="speak" id="say" aria-label="発音を聞く">🔊 発音</button><button class="speak danger" id="del-card">削除</button></span></div>
+        <div class="top"><span class="row" style="gap:6px"><span class="chip ${k.s}">${LABEL[k.s]}</span>${looks(k) > 1 ? `<span class="chip look">調べた ${looks(k)}回</span>` : ""}</span><span class="row" style="gap:6px"><button class="speak" id="say" aria-label="発音を聞く">🔊 発音</button><button class="speak danger" id="del-card">削除</button></span></div>
         ${front}
         ${s.flipped ? back : `<p class="hint">意味を思い浮かべてから、カードをタップ</p>`}
       </div>
@@ -354,10 +359,18 @@ function renderList(){
   const q = ui.q.trim().toLowerCase();
   let items = ui.filter === "all" ? state.cards.slice() : state.cards.filter(k=>k.s===ui.filter);
   if (q) items = items.filter(k => (k.w+" "+(k.ja||"")+" "+(k.def||"")).toLowerCase().includes(q));
-  items.sort((a,b)=>a.w.localeCompare(b.w));
+  if (ui.sort === "look") items.sort((a,b) => looks(b)-looks(a) || (b.lastLook||0)-(a.lastLook||0) || a.w.localeCompare(b.w));
+  else items.sort((a,b)=>a.w.localeCompare(b.w));
   v.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:12px">
       <input type="search" id="q" placeholder="単語・意味で検索" value="${esc(ui.q)}">
+      <div class="row" style="justify-content:space-between">
+        <span class="h2">並び順</span>
+        <div class="seg">
+          <button data-sort="abc" aria-pressed="${ui.sort!=="look"}">ABC順</button>
+          <button data-sort="look" aria-pressed="${ui.sort==="look"}">よく調べた順</button>
+        </div>
+      </div>
       <div class="filters">
         <button data-f="all" aria-pressed="${ui.filter==="all"}">すべて ${state.cards.length}</button>
         ${["ng","meh","new","ok"].map(g=>`<button data-f="${g}" aria-pressed="${ui.filter===g}">${LABEL[g]} ${c[g]}</button>`).join("")}
@@ -365,7 +378,7 @@ function renderList(){
       <div class="list">
         ${items.length ? items.map(k => `
           <div class="item" data-id="${k.id}">
-            <span class="w">${esc(k.w)}</span><span class="chip ${k.s}">${LABEL[k.s]}</span>
+            <span class="w">${esc(k.w)}</span><span class="row" style="gap:4px;flex-wrap:nowrap;align-self:start">${looks(k) > 1 ? `<span class="chip look">調べた${looks(k)}回</span>` : ""}<span class="chip ${k.s}">${LABEL[k.s]}</span></span>
             <span class="m">${esc(k.def || k.ja || "")}</span>
             ${ui.open === k.id ? `
             <div class="detail">
@@ -388,6 +401,7 @@ function renderList(){
   const qi = $("#q");
   qi.oninput = () => { ui.q = qi.value; const pos = qi.selectionStart; renderList(); const n=$("#q"); n.focus(); n.setSelectionRange(pos,pos); };
   v.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { ui.filter = b.dataset.f; renderList(); });
+  v.querySelectorAll("[data-sort]").forEach(b => b.onclick = () => { ui.sort = b.dataset.sort; renderList(); });
   v.querySelectorAll(".item").forEach(el => el.onclick = e => {
     const id = el.dataset.id, k = state.cards.find(c=>c.id===id);
     const t = e.target.closest("button");
@@ -415,8 +429,8 @@ function importCode(text){
     const fields = {ja:str(x.ja), def:str(x.def), exS:str(x.exS), exR:str(x.exR), fam:str(x.fam), kind:str(x.kind)};
     const have = byWord.get(w.toLowerCase());
     const fromBackup = m[1] === "WORDCARDS-BACKUP1" && LABEL[x.s];
-    if (have){ Object.assign(have, fields); if (fromBackup) have.s = x.s; updated++; }   // keep its review status
-    else { const k = {id:uid(), w, ...fields, s: fromBackup ? x.s : "new", n:0, t:0}; state.cards.push(k); byWord.set(w.toLowerCase(), k); added++; }
+    if (have){ Object.assign(have, fields); if (fromBackup) have.s = x.s; if ((x.look||1) > looks(have)) have.look = x.look; updated++; }   // keep its review status
+    else { const k = {id:uid(), w, ...fields, s: fromBackup ? x.s : "new", n:0, t:0, look: x.look || 1}; state.cards.push(k); byWord.set(w.toLowerCase(), k); added++; }
   });
   state.pending = (state.pending || []).filter(t => { const c = byWord.get(t.toLowerCase()); return !(c && c.ja); });
   save();
@@ -485,7 +499,7 @@ function renderAdd(){
     }
   };
   $("#backup").onclick = async () => {
-    const code = "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, fam:k.fam||"", kind:k.kind||"", s:k.s})));
+    const code = "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, fam:k.fam||"", kind:k.kind||"", look:looks(k), s:k.s})));
     const msg = $("#backup-msg");
     // select-all-and-copy, the way that works by hand on iPhone
     msg.innerHTML = `<span id="backup-status"></span><textarea id="backup-box" rows="3" style="margin-top:6px;font-size:12px" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>`;
