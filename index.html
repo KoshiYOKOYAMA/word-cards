@@ -148,7 +148,7 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "7";
+const APP_VERSION = "8";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -202,13 +202,6 @@ function pool(group){
   return C.filter(k => k.s === group);
 }
 function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
-function orderForReview(cards){ const rank={ng:0,meh:1,new:2,ok:3}; return shuffle(cards.slice()).sort((a,b)=>rank[a.s]-rank[b.s]); }
-function startSession(group, ids){
-  const cards = ids ? state.cards.filter(k=>ids.includes(k.id)) : orderForReview(pool(group));
-  if (!cards.length) return;
-  ui.session = {ids: cards.map(k=>k.id), i:0, flipped:false, res:{ok:[],meh:[],ng:[]}};
-  ui.showJa = false; render();
-}
 function speak(text){
   try { const u = new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=.9; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch(e){}
 }
