@@ -1,0 +1,420 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>単語カード 復習</title>
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="単語カード">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#2f5d9a">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<style>
+/* Layout: one narrow column like a stack of index cards; top tabs, card in the middle, rating buttons under the thumb. */
+:root{
+  --bg:#e9edf2; --surface:#ffffff; --fg:#1d2733; --muted:#5f6b7a; --line:#d3dae3;
+  --rule:#b9cde6; --margin:#e08a8a; --accent:#2f5d9a; --accent-fg:#ffffff;
+  --ok:#2f8a57; --ok-bg:#e3f3ea; --meh:#b7791f; --meh-bg:#fbf0dc; --ng:#c0453b; --ng-bg:#fbe6e3; --new:#5f6b7a; --new-bg:#eceff3;
+  --font-word:Georgia,"Times New Roman",serif;
+  --font-ui:"Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#141a21; --surface:#1e2630; --fg:#e6ebf1; --muted:#9aa6b4; --line:#323d4a;
+  --rule:#2c3d55; --margin:#7a3a3a; --accent:#7ea7e0; --accent-fg:#0f1620;
+  --ok:#6cc896; --ok-bg:#1d3328; --meh:#e2b05a; --meh-bg:#3a2f1a; --ng:#ef8a80; --ng-bg:#3d2220; --new:#9aa6b4; --new-bg:#28313c; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#141a21; --surface:#1e2630; --fg:#e6ebf1; --muted:#9aa6b4; --line:#323d4a;
+  --rule:#2c3d55; --margin:#7a3a3a; --accent:#7ea7e0; --accent-fg:#0f1620;
+  --ok:#6cc896; --ok-bg:#1d3328; --meh:#e2b05a; --meh-bg:#3a2f1a; --ng:#ef8a80; --ng-bg:#3d2220; --new:#9aa6b4; --new-bg:#28313c; color-scheme:dark}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-ui);font-size:15px;line-height:1.6;-webkit-tap-highlight-color:transparent}
+.wrap{max-width:520px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px 32px;display:flex;flex-direction:column;gap:16px}
+header{display:flex;align-items:center;justify-content:space-between;gap:12px}
+h1{font-family:var(--font-word);font-size:22px;margin:0;letter-spacing:.01em}
+.sync{font-size:12px;color:var(--muted)}
+nav{display:grid;grid-template-columns:repeat(3,1fr);background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:4px;gap:4px}
+nav button{border:0;background:transparent;color:var(--muted);font:inherit;font-weight:500;padding:9px 4px;border-radius:9px;cursor:pointer}
+nav button[aria-selected="true"]{background:var(--accent);color:var(--accent-fg)}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.h2{font-size:13px;font-weight:700;color:var(--muted);letter-spacing:.06em;margin:0}
+
+/* category tiles */
+.tiles{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.tile{border:1px solid var(--line);background:var(--surface);border-radius:12px;padding:12px 14px;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+.tile .n{font-family:var(--font-word);font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}
+.tile .l{font-size:13px;font-weight:500;display:flex;align-items:center;gap:6px}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block}
+.ok .dot{background:var(--ok)} .meh .dot{background:var(--meh)} .ng .dot{background:var(--ng)} .new .dot{background:var(--new)}
+.tile.ok .n{color:var(--ok)} .tile.meh .n{color:var(--meh)} .tile.ng .n{color:var(--ng)}
+.tile[disabled]{opacity:.5;cursor:default}
+.bar{display:flex;height:8px;border-radius:4px;overflow:hidden;background:var(--new-bg)}
+.bar span{display:block;height:100%}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface)}
+.seg button{border:0;background:transparent;padding:7px 12px;font-size:13px;cursor:pointer;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg)}
+.primary{border:0;background:var(--accent);color:var(--accent-fg);font-weight:700;padding:13px 16px;border-radius:12px;cursor:pointer;width:100%}
+.ghost{border:1px solid var(--line);background:var(--surface);padding:9px 14px;border-radius:10px;cursor:pointer}
+.primary[disabled],.ghost[disabled]{opacity:.5;cursor:default}
+
+/* flashcard: an index card with blue rules and a red margin line */
+.card{position:relative;background:var(--surface);border-radius:6px;min-height:340px;padding:22px 20px 22px 38px;cursor:pointer;
+  box-shadow:0 1px 2px rgba(0,0,0,.08),0 8px 24px rgba(20,40,70,.10);
+  background-image:linear-gradient(to right,transparent 26px,var(--margin) 26px,var(--margin) 27px,transparent 27px),
+    repeating-linear-gradient(to bottom,transparent 0,transparent 31px,var(--rule) 31px,var(--rule) 32px);
+  background-position:0 0,0 54px;display:flex;flex-direction:column;gap:10px}
+.card .top{display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)}
+.chip{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
+.chip.ok{background:var(--ok-bg);color:var(--ok)} .chip.meh{background:var(--meh-bg);color:var(--meh)} .chip.ng{background:var(--ng-bg);color:var(--ng)} .chip.new{background:var(--new-bg);color:var(--new)}
+.word{font-family:var(--font-word);font-size:clamp(30px,9vw,42px);font-weight:700;line-height:1.15;margin:18px 0 0;overflow-wrap:anywhere;text-wrap:balance}
+.prompt-ja{font-size:22px;font-weight:700;margin:18px 0 0}
+.hint{color:var(--muted);font-size:13px;margin-top:auto}
+.back{display:flex;flex-direction:column;gap:12px;border-top:1px dashed var(--line);padding-top:12px}
+.back .ja{font-size:18px;font-weight:700}
+.lab{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;display:block}
+.def{font-family:var(--font-word);font-size:16px}
+.ex{font-family:var(--font-word);font-size:15px}
+.rate{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.rate button{border:0;border-radius:12px;padding:14px 4px;font-weight:700;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+.rate small{font-weight:400;font-size:11px;opacity:.85}
+.rate .ng{background:var(--ng-bg);color:var(--ng)} .rate .meh{background:var(--meh-bg);color:var(--meh)} .rate .ok{background:var(--ok-bg);color:var(--ok)}
+.progress{font-size:12px;color:var(--muted);font-variant-numeric:tabular-nums;display:flex;justify-content:space-between}
+.speak{border:1px solid var(--line);background:transparent;border-radius:8px;padding:2px 8px;font-size:12px;cursor:pointer;color:var(--muted)}
+
+/* list */
+.filters{display:flex;gap:6px;overflow-x:auto;padding-bottom:2px}
+.filters button{flex:none;border:1px solid var(--line);background:var(--surface);border-radius:999px;padding:5px 12px;font-size:13px;cursor:pointer}
+.filters button[aria-pressed="true"]{border-color:var(--accent);color:var(--accent);font-weight:700}
+.list{display:flex;flex-direction:column;background:var(--surface);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.item{display:grid;grid-template-columns:1fr auto;gap:4px 10px;padding:11px 14px;border-top:1px solid var(--line);cursor:pointer}
+.item:first-child{border-top:0}
+.item .w{font-family:var(--font-word);font-weight:700;font-size:16px;min-width:0;overflow-wrap:anywhere}
+.item .m{grid-column:1/-1;color:var(--muted);font-size:13px;min-width:0}
+.detail{grid-column:1/-1;display:flex;flex-direction:column;gap:8px;padding-top:6px}
+.empty{padding:22px 16px;text-align:center;color:var(--muted)}
+input[type=search],input[type=text],textarea{width:100%;font:inherit;color:var(--fg);background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+textarea{resize:vertical;min-height:70px}
+.field{display:flex;flex-direction:column;gap:4px}
+.field label{font-size:12px;font-weight:700;color:var(--muted)}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:12px}
+.note{font-size:12px;color:var(--muted)}
+.err{font-size:13px;color:var(--ng)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(20px + env(safe-area-inset-bottom,0px));background:var(--fg);color:var(--bg);padding:9px 16px;border-radius:999px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+.done{text-align:center;display:flex;flex-direction:column;gap:12px;align-items:stretch}
+.done .big{font-family:var(--font-word);font-size:26px;font-weight:700}
+.sum{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.sum div{border-radius:10px;padding:10px;font-variant-numeric:tabular-nums}
+.sum b{display:block;font-size:22px;font-family:var(--font-word)}
+.sum .ok{background:var(--ok-bg);color:var(--ok)} .sum .meh{background:var(--meh-bg);color:var(--meh)} .sum .ng{background:var(--ng-bg);color:var(--ng)}
+.danger{color:var(--ng)}
+@media (prefers-reduced-motion:no-preference){.card{transition:transform .15s}.card:active{transform:scale(.99)}}
+
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light}
+body{margin:0}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>単語カード</h1>
+    <span class="sync" id="sync">オフライン対応</span>
+  </header>
+  <nav role="tablist">
+    <button role="tab" id="tab-study" aria-selected="true" data-tab="study">復習</button>
+    <button role="tab" id="tab-list" aria-selected="false" data-tab="list">単語リスト</button>
+    <button role="tab" id="tab-add" aria-selected="false" data-tab="add">読み込み</button>
+  </nav>
+  <section id="v-study"></section>
+  <section id="v-list" hidden></section>
+  <section id="v-add" hidden></section>
+</div>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+(() => {
+const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
+const KEY = "wordcards.offline.v1";
+const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
+const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
+const str = x => Array.isArray(x) ? x.map(str).join(", ") : (x == null ? "" : typeof x === "object" ? Object.values(x).map(str).join(", ") : String(x));
+const $ = (s, r=document) => r.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const toast = msg => { const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove("show"),2000); };
+
+let state = {cards: []};
+let ui = {tab:"study", dir:"en", session:null, filter:"all", q:"", open:null, showJa:false};
+
+function load(){ try{ const s = JSON.parse(localStorage.getItem(KEY)||"null"); if (s && Array.isArray(s.cards)) state = s; }catch(e){} }
+function save(){
+  try{ localStorage.setItem(KEY, JSON.stringify(state)); }
+  catch(e){ toast("保存できませんでした。プライベートブラウズを切ってください。"); }
+}
+try { const d = localStorage.getItem("wordcards.dir"); if (d) ui.dir = d; } catch(e){}
+
+const counts = () => { const c={new:0,ng:0,meh:0,ok:0}; state.cards.forEach(k=>c[k.s]++); return c; };
+function pool(group){
+  const C = state.cards;
+  if (group === "due") return C.filter(k => k.s !== "ok");
+  if (group === "all") return C.slice();
+  return C.filter(k => k.s === group);
+}
+function shuffle(a){ for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];} return a; }
+function orderForReview(cards){ const rank={ng:0,meh:1,new:2,ok:3}; return shuffle(cards.slice()).sort((a,b)=>rank[a.s]-rank[b.s]); }
+function startSession(group, ids){
+  const cards = ids ? state.cards.filter(k=>ids.includes(k.id)) : orderForReview(pool(group));
+  if (!cards.length) return;
+  ui.session = {ids: cards.map(k=>k.id), i:0, flipped:false, res:{ok:[],meh:[],ng:[]}};
+  ui.showJa = false; render();
+}
+function speak(text){
+  try { const u = new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=.9; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch(e){}
+}
+
+function render(){
+  document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === ui.tab));
+  $("#v-study").hidden = ui.tab !== "study";
+  $("#v-list").hidden = ui.tab !== "list";
+  $("#v-add").hidden = ui.tab !== "add";
+  if (ui.tab === "study") renderStudy();
+  if (ui.tab === "list") renderList();
+  if (ui.tab === "add") renderAdd();
+}
+
+function renderStudy(){
+  const v = $("#v-study");
+  const s = ui.session;
+  if (!s){
+    const c = counts(), total = state.cards.length || 1;
+    const due = c.ng + c.meh + c.new;
+    v.innerHTML = state.cards.length ? `
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <div class="bar" aria-label="覚えた割合">
+          <span style="width:${c.ok/total*100}%;background:var(--ok)"></span>
+          <span style="width:${c.meh/total*100}%;background:var(--meh)"></span>
+          <span style="width:${c.ng/total*100}%;background:var(--ng)"></span>
+        </div>
+        <div class="tiles">
+          ${["ng","meh","new","ok"].map(g => `
+            <button class="tile ${g}" data-start="${g}" ${c[g]?"":"disabled"}>
+              <span class="n">${c[g]}</span><span class="l"><i class="dot"></i>${LABEL[g]}を復習</span>
+            </button>`).join("")}
+        </div>
+        <div class="row" style="justify-content:space-between">
+          <span class="h2">出題の向き</span>
+          <div class="seg">
+            <button data-dir="en" aria-pressed="${ui.dir==="en"}">英語 → 意味</button>
+            <button data-dir="ja" aria-pressed="${ui.dir==="ja"}">英語の意味 → 単語</button>
+          </div>
+        </div>
+        <button class="primary" data-start="due" ${due?"":"disabled"}>完璧以外をまとめて復習（${due}枚）</button>
+        <button class="ghost" data-start="all">全部の単語で練習（${state.cards.length}枚）</button>
+      </div>` : `
+      <div class="panel">
+        <span class="h2">はじめに</span>
+        <p style="margin:0">まだ単語が入っていません。単語を作るアプリの「単語リスト」で「復習版に送る」を押し、このアプリの「読み込み」タブに貼り付けてください。</p>
+        <button class="primary" data-go="add">読み込みタブへ</button>
+      </div>`;
+    return;
+  }
+  if (s.i >= s.ids.length){
+    const again = [...s.res.ng, ...s.res.meh];
+    v.innerHTML = `
+      <div class="panel done">
+        <div class="big">おつかれさま</div>
+        <div class="sum">
+          <div class="ok"><b>${s.res.ok.length}</b>完璧</div>
+          <div class="meh"><b>${s.res.meh.length}</b>あいまい</div>
+          <div class="ng"><b>${s.res.ng.length}</b>忘れた</div>
+        </div>
+        ${again.length ? `<button class="primary" id="again">忘れた・あいまいだけもう一度（${again.length}枚）</button>` : `<p>全部完璧でした。</p>`}
+        <button class="ghost" id="finish">ホームに戻る</button>
+      </div>`;
+    if (again.length) $("#again").onclick = () => startSession(null, again);
+    $("#finish").onclick = () => { ui.session = null; render(); };
+    return;
+  }
+  const k = state.cards.find(c => c.id === s.ids[s.i]);
+  if (!k){ s.i++; return renderStudy(); }
+  const front = ui.dir === "en"
+    ? `<p class="word">${esc(k.w)}</p>`
+    : `<p class="prompt-ja">${esc(k.def || k.ja)}</p>`;
+  const back = `
+    <div class="back">
+      ${ui.dir === "ja" ? `<p class="word" style="margin:0">${esc(k.w)}</p>` : ""}
+      ${k.def && ui.dir==="en" ? `<div><span class="lab">Meaning</span><div class="def">${esc(k.def)}</div></div>` : ""}
+      ${k.exS ? `<div><span class="lab">Speaking</span><div class="ex">${esc(k.exS)}</div></div>` : ""}
+      ${k.exR ? `<div><span class="lab">Reading</span><div class="ex">${esc(k.exR)}</div></div>` : ""}
+      ${k.ja ? (ui.showJa ? `<div><span class="lab">日本語</span><div class="ja">${esc(k.ja)}</div></div>` : `<div><button class="speak" id="show-ja">日本語訳を見る</button></div>`) : ""}
+    </div>`;
+  v.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="progress"><span>${s.i+1} / ${s.ids.length}</span><button class="speak" id="quit">やめる</button></div>
+      <div class="card" id="card" tabindex="0" role="button" aria-label="タップで答えを見る">
+        <div class="top"><span class="chip ${k.s}">${LABEL[k.s]}</span><button class="speak" id="say" aria-label="発音を聞く">🔊 発音</button></div>
+        ${front}
+        ${s.flipped ? back : `<p class="hint">意味を思い浮かべてから、カードをタップ</p>`}
+      </div>
+      ${s.flipped ? `
+      <div class="rate">
+        <button class="ng" data-rate="ng">忘れた<small>思い出せない</small></button>
+        <button class="meh" data-rate="meh">あいまい<small>少し迷った</small></button>
+        <button class="ok" data-rate="ok">完璧<small>すぐ言えた</small></button>
+      </div>` : `<button class="primary" id="flip">答えを見る</button>`}
+    </div>`;
+  const flip = () => { s.flipped = true; renderStudy(); };
+  $("#card").onclick = e => {
+    if (e.target.closest("#say")) return;
+    if (e.target.closest("#show-ja")){ ui.showJa = true; return renderStudy(); }
+    if (!s.flipped) flip();
+  };
+  $("#card").onkeydown = e => { if ((e.key===" "||e.key==="Enter") && !s.flipped){ e.preventDefault(); flip(); } };
+  $("#say").onclick = () => speak(k.w);
+  $("#quit").onclick = () => { ui.session = null; render(); };
+  if ($("#flip")) $("#flip").onclick = flip;
+  v.querySelectorAll("[data-rate]").forEach(b => b.onclick = () => {
+    const r = b.dataset.rate;
+    k.s = r; k.n = (k.n||0)+1; k.t = Date.now();
+    s.res[r].push(k.id); s.i++; s.flipped = false; ui.showJa = false;
+    save(); renderStudy();
+  });
+}
+
+function renderList(){
+  const v = $("#v-list");
+  const c = counts();
+  const q = ui.q.trim().toLowerCase();
+  let items = ui.filter === "all" ? state.cards.slice() : state.cards.filter(k=>k.s===ui.filter);
+  if (q) items = items.filter(k => (k.w+" "+(k.ja||"")+" "+(k.def||"")).toLowerCase().includes(q));
+  items.sort((a,b)=>a.w.localeCompare(b.w));
+  v.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <input type="search" id="q" placeholder="単語・意味で検索" value="${esc(ui.q)}">
+      <div class="filters">
+        <button data-f="all" aria-pressed="${ui.filter==="all"}">すべて ${state.cards.length}</button>
+        ${["ng","meh","new","ok"].map(g=>`<button data-f="${g}" aria-pressed="${ui.filter===g}">${LABEL[g]} ${c[g]}</button>`).join("")}
+      </div>
+      <div class="list">
+        ${items.length ? items.map(k => `
+          <div class="item" data-id="${k.id}">
+            <span class="w">${esc(k.w)}</span><span class="chip ${k.s}">${LABEL[k.s]}</span>
+            <span class="m">${esc(k.def || k.ja || "")}</span>
+            ${ui.open === k.id ? `
+            <div class="detail">
+              ${k.exS ? `<div><span class="lab">Speaking</span><div class="ex">${esc(k.exS)}</div></div>`:""}
+              ${k.exR ? `<div><span class="lab">Reading</span><div class="ex">${esc(k.exR)}</div></div>`:""}
+              ${k.ja ? `<div><span class="lab">日本語</span><div>${esc(k.ja)}</div></div>`:""}
+              <div class="row">
+                <span class="note">分類を変える:</span>
+                ${["ng","meh","ok","new"].map(g=>`<button class="speak" data-set="${g}">${LABEL[g]}</button>`).join("")}
+              </div>
+              <div class="row">
+                <button class="speak" data-say>🔊 発音</button>
+                <button class="speak danger" data-del>削除</button>
+              </div>
+            </div>` : ""}
+          </div>`).join("") : `<div class="empty">${state.cards.length ? "この分類の単語はありません" : "まだ単語がありません"}</div>`}
+      </div>
+    </div>`;
+  const qi = $("#q");
+  qi.oninput = () => { ui.q = qi.value; const pos = qi.selectionStart; renderList(); const n=$("#q"); n.focus(); n.setSelectionRange(pos,pos); };
+  v.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { ui.filter = b.dataset.f; renderList(); });
+  v.querySelectorAll(".item").forEach(el => el.onclick = e => {
+    const id = el.dataset.id, k = state.cards.find(c=>c.id===id);
+    const t = e.target.closest("button");
+    if (t && t.dataset.set){ k.s = t.dataset.set; save(); toast(`「${k.w}」を${LABEL[k.s]}に移動`); return renderList(); }
+    if (t && t.hasAttribute("data-say")) return speak(k.w);
+    if (t && t.hasAttribute("data-del")){
+      if (t.dataset.confirm){ state.cards = state.cards.filter(c=>c.id!==id); ui.open=null; save(); toast(`「${k.w}」を削除しました`); return renderList(); }
+      t.dataset.confirm = "1"; t.textContent = "本当に削除"; return;
+    }
+    if (e.target.closest(".detail")) return;
+    ui.open = ui.open === id ? null : id; renderList();
+  });
+}
+
+function importCode(text){
+  const t = (text || "").trim();
+  const m = t.match(/^(WORDCARDS1|WORDCARDS-BACKUP1):([\s\S]*)$/);
+  if (!m) throw new Error("format");
+  const arr = JSON.parse(m[2]);
+  if (!Array.isArray(arr)) throw new Error("format");
+  const byWord = new Map(state.cards.map(k => [k.w.toLowerCase(), k]));
+  let added = 0, updated = 0;
+  arr.forEach(x => {
+    const w = x ? str(x.w).trim() : "";
+    if (!w) return;
+    const fields = {ja:str(x.ja), def:str(x.def), exS:str(x.exS), exR:str(x.exR)};
+    const have = byWord.get(w.toLowerCase());
+    const fromBackup = m[1] === "WORDCARDS-BACKUP1" && LABEL[x.s];
+    if (have){ Object.assign(have, fields); if (fromBackup) have.s = x.s; updated++; }   // keep its review status
+    else { const k = {id:uid(), w, ...fields, s: fromBackup ? x.s : "new", n:0, t:0}; state.cards.push(k); byWord.set(w.toLowerCase(), k); added++; }
+  });
+  save();
+  return {added, updated};
+}
+
+function renderAdd(){
+  const v = $("#v-add");
+  v.innerHTML = `
+    <div style="display:flex;flex-direction:column;gap:16px">
+      <div class="panel">
+        <span class="h2">単語を読み込む</span>
+        <p class="note" style="margin:0">1. <a href="${ADD_URL}" target="_blank" rel="noopener">単語を作るアプリ</a>（claude.ai）で単語を追加<br>2. そのアプリの「単語リスト」で「復習版に送る」を押す<br>3. 下の枠に貼り付けて「読み込む」</p>
+        <div class="field"><label for="f-code">コピーしたコード</label>
+          <textarea id="f-code" rows="4" placeholder="ここを長押しして「ペースト」" autocapitalize="off" spellcheck="false"></textarea></div>
+        <button class="primary" id="import">読み込む</button>
+        <p class="note" id="import-msg">すでにある単語は、覚えた状況（完璧・あいまい・忘れた）をそのまま残します。</p>
+      </div>
+      <div class="panel">
+        <span class="h2">バックアップ</span>
+        <p class="note" style="margin:0">覚えた状況はこのiPhoneの中だけに保存されています。ときどきコピーして、メモアプリなどに貼っておくと安心です。戻すときは上の枠に貼り付けて「読み込む」を押します。</p>
+        <button class="ghost" id="backup" ${state.cards.length?"":"disabled"}>バックアップをコピー（${state.cards.length}語）</button>
+        <p class="note" id="backup-msg"></p>
+      </div>
+    </div>`;
+  $("#import").onclick = () => {
+    const msg = $("#import-msg");
+    try {
+      const r = importCode($("#f-code").value);
+      $("#f-code").value = "";
+      msg.textContent = `新しく${r.added}語を追加、${r.updated}語を更新しました。`;
+      toast(`${r.added}語を追加しました`);
+    } catch(e){
+      msg.innerHTML = `<span class="err">読み込めませんでした。「復習版に送る」でコピーした文字を、そのまま全部貼り付けてください。</span>`;
+    }
+  };
+  $("#backup").onclick = async () => {
+    const code = "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, s:k.s})));
+    const msg = $("#backup-msg");
+    try { await navigator.clipboard.writeText(code); msg.textContent = "コピーしました。メモアプリなどに貼っておいてください。"; }
+    catch(e){
+      msg.innerHTML = `下の枠を長押しして「すべてを選択」→「コピー」してください。<textarea id="backup-box" rows="3" readonly></textarea>`;
+      const box = $("#backup-box"); box.value = code; box.focus(); box.select();
+    }
+  };
+}
+
+document.querySelector("nav").onclick = e => { const b = e.target.closest("button"); if (!b) return; ui.tab = b.dataset.tab; render(); };
+$("#v-study").addEventListener("click", e => {
+  const go = e.target.closest("[data-go]"); if (go){ ui.tab = go.dataset.go; return render(); }
+  const st = e.target.closest("[data-start]"); if (st && !st.disabled) return startSession(st.dataset.start);
+  const dr = e.target.closest("[data-dir]"); if (dr){ ui.dir = dr.dataset.dir; try{localStorage.setItem("wordcards.dir",ui.dir);}catch(_){} renderStudy(); }
+});
+addEventListener("error", e => toast("エラー: " + (e.message || "不明なエラー")));
+
+const setNet = () => { $("#sync").textContent = navigator.onLine ? "オフライン対応" : "オフラインで使用中"; };
+addEventListener("online", setNet); addEventListener("offline", setNet);
+
+load(); setNet(); render();
+if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
+if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
+})();
+</script>
+</body>
+</html>
