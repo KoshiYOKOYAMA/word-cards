@@ -71,6 +71,7 @@ button{font:inherit;color:inherit}
 .chip{font-size:11px;font-weight:700;padding:2px 8px;border-radius:999px}
 .chip.ok{background:var(--ok-bg);color:var(--ok)} .chip.meh{background:var(--meh-bg);color:var(--meh)} .chip.ng{background:var(--ng-bg);color:var(--ng)} .chip.new{background:var(--new-bg);color:var(--new)}
 .word{font-family:var(--font-word);font-size:clamp(30px,9vw,42px);font-weight:700;line-height:1.15;margin:18px 0 0;overflow-wrap:anywhere;text-wrap:balance}
+.word.sent{font-size:clamp(19px,5.5vw,24px);font-weight:500;line-height:1.5;text-wrap:pretty}
 .prompt-ja{font-size:22px;font-weight:700;margin:18px 0 0}
 .hint{color:var(--muted);font-size:13px;margin-top:auto}
 .back{display:flex;flex-direction:column;gap:12px;border-top:1px dashed var(--line);padding-top:12px}
@@ -139,13 +140,14 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "5";
+const APP_VERSION = "6";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
 const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
 const str = x => Array.isArray(x) ? x.map(str).join(", ") : (x == null ? "" : typeof x === "object" ? Object.values(x).map(str).join(", ") : String(x));
 const $ = (s, r=document) => r.querySelector(s);
+const isSentence = k => k.kind === "sentence" || (!k.kind && /\s/.test(k.w) && k.w.trim().split(/\s+/).length >= 6);
 const famHtml = f => String(f).split(/\s*\/\s*|\n/).filter(Boolean).map(esc).join("<br>");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const toast = msg => { const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toast.h); toast.h=setTimeout(()=>t.classList.remove("show"),2000); };
@@ -244,17 +246,18 @@ function renderStudy(){
   }
   const k = state.cards.find(c => c.id === s.ids[s.i]);
   if (!k){ s.i++; return renderStudy(); }
-  const front = ui.dir === "en"
-    ? `<p class="word">${esc(k.w)}</p>`
+  const sent = isSentence(k);
+  const front = (ui.dir === "en" || sent)
+    ? `<p class="word${sent?" sent":""}">${esc(k.w)}</p>`
     : `<p class="prompt-ja">${esc(k.def || k.ja)}</p>`;
   const back = `
     <div class="back">
-      ${ui.dir === "ja" ? `<p class="word" style="margin:0">${esc(k.w)}</p>` : ""}
+      ${ui.dir === "ja" && !sent ? `<p class="word" style="margin:0">${esc(k.w)}</p>` : ""}
       ${k.def && ui.dir==="en" ? `<div><span class="lab">Meaning</span><div class="def">${esc(k.def)}</div></div>` : ""}
       ${k.exS ? `<div><span class="lab">Speaking</span><div class="ex">${esc(k.exS)}</div></div>` : ""}
       ${k.exR ? `<div><span class="lab">Reading</span><div class="ex">${esc(k.exR)}</div></div>` : ""}
       ${k.fam ? `<div><span class="lab">Word family</span><div class="fam">${famHtml(k.fam)}</div></div>` : ""}
-      ${k.ja ? (ui.showJa ? `<div><span class="lab">日本語</span><div class="ja">${esc(k.ja)}</div></div>` : `<div><button class="speak" id="show-ja">日本語訳を見る</button></div>`) : ""}
+      ${sent && k.ja ? `<div><span class="lab">直訳</span><div class="ja">${esc(k.ja)}</div></div>` : k.ja ? (ui.showJa ? `<div><span class="lab">日本語</span><div class="ja">${esc(k.ja)}</div></div>` : `<div><button class="speak" id="show-ja">日本語訳を見る</button></div>`) : ""}
     </div>`;
   v.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:12px">
@@ -355,7 +358,7 @@ function importCode(text){
   arr.forEach(x => {
     const w = x ? str(x.w).trim() : "";
     if (!w) return;
-    const fields = {ja:str(x.ja), def:str(x.def), exS:str(x.exS), exR:str(x.exR), fam:str(x.fam)};
+    const fields = {ja:str(x.ja), def:str(x.def), exS:str(x.exS), exR:str(x.exR), fam:str(x.fam), kind:str(x.kind)};
     const have = byWord.get(w.toLowerCase());
     const fromBackup = m[1] === "WORDCARDS-BACKUP1" && LABEL[x.s];
     if (have){ Object.assign(have, fields); if (fromBackup) have.s = x.s; updated++; }   // keep its review status
@@ -414,7 +417,7 @@ function renderAdd(){
     }
   };
   $("#backup").onclick = async () => {
-    const code = "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, fam:k.fam||"", s:k.s})));
+    const code = "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, fam:k.fam||"", kind:k.kind||"", s:k.s})));
     const msg = $("#backup-msg");
     // select-all-and-copy, the way that works by hand on iPhone
     msg.innerHTML = `<span id="backup-status"></span><textarea id="backup-box" rows="3" style="margin-top:6px;font-size:12px" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>`;

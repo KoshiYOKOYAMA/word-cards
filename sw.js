@@ -1,6 +1,6 @@
 // Keeps the app's files on the phone so it opens without a connection.
 // Bump VERSION whenever index.html changes so phones pick up the new copy.
-const VERSION = "v5";
+const VERSION = "v6";
 const FILES = ["./", "./index.html", "./manifest.json", "./icon-180.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
