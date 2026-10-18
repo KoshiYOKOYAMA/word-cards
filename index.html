@@ -339,8 +339,9 @@ function renderList(){
 }
 
 function importCode(text){
-  const t = (text || "").trim();
-  const m = t.match(/^(WORDCARDS1|WORDCARDS-BACKUP1):([\s\S]*)$/);
+  // tolerate extra text around the code, invisible characters and curly quotes from the iPhone keyboard
+  const t = String(text || "").replace(/[​-‍﻿]/g, "").replace(/[“”„]/g, '"').replace(/[‘’]/g, "'");
+  const m = t.match(/(WORDCARDS1|WORDCARDS-BACKUP1)\s*:\s*(\[[\s\S]*\])/);
   if (!m) throw new Error("format");
   const arr = JSON.parse(m[2]);
   if (!Array.isArray(arr)) throw new Error("format");
@@ -386,7 +387,13 @@ function renderAdd(){
       msg.textContent = `新しく${r.added}語を追加、${r.updated}語を更新しました。`;
       toast(`${r.added}語を追加しました`);
     } catch(e){
-      msg.innerHTML = `<span class="err">読み込めませんでした。「復習版に送る」でコピーした文字を、そのまま全部貼り付けてください。</span>`;
+      const got = $("#f-code").value.trim();
+      const head = got.slice(0, 40);
+      let why;
+      if (!got) why = "枠が空です。枠を長押しして「ペースト」を押してください。";
+      else if (!/WORDCARDS/.test(got)) why = `貼り付けられたのは単語のコードではありませんでした（先頭:「${esc(head)}」）。単語を作るアプリの「単語リスト」で「復習版に送る」を押し、すぐにここへ貼り付けてください。`;
+      else why = `コードが途中で切れているようです（${got.length}文字）。「復習版に送る」を押して出てくる枠の中を、全部選択してコピーし直してください。`;
+      msg.innerHTML = `<span class="err">${why}</span>`;
     }
   };
   $("#backup").onclick = async () => {
