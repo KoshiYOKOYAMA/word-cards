@@ -77,6 +77,7 @@ button{font:inherit;color:inherit}
 .back{display:flex;flex-direction:column;gap:12px;border-top:1px dashed var(--line);padding-top:12px}
 .back .ja{font-size:18px;font-weight:700}
 .lab{font-size:11px;font-weight:700;letter-spacing:.08em;color:var(--muted);text-transform:uppercase;display:block}
+.mini{text-transform:none;letter-spacing:0;font-weight:500;font-size:11px;border:1px solid var(--line);background:var(--surface);color:var(--accent);border-radius:999px;padding:1px 8px;margin-left:6px;cursor:pointer;vertical-align:1px}
 .def{font-family:var(--font-word);font-size:16px}
 .ex{font-family:var(--font-word);font-size:15px}
 .fam{font-size:14px;line-height:1.7}
@@ -148,7 +149,7 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "9";
+const APP_VERSION = "10";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -179,6 +180,26 @@ function askDelete(k, after){
     }
   };
   bg.querySelector("[data-x]").focus();
+}
+// Turn an example sentence into its own card now; keep it on a list to send to the add app for a translation
+function addExample(text){
+  text = str(text).trim(); if (!text) return;
+  state.pending = state.pending || [];
+  if (!state.pending.includes(text)) state.pending.push(text);
+  if (state.cards.some(c => c.w.toLowerCase() === text.toLowerCase())){ save(); return toast("この例文はもうカードにあります"); }
+  state.cards.push({id:uid(), w:text, kind:"sentence", ja:"", def:"", exS:"", exR:"", fam:"", s:"new", n:0, t:0});
+  save();
+  if (ui.tab === "list") renderList();
+  toast("例文をカードにしました。「読み込み」の追加待ちにも入れました");
+}
+function copyText(text, statusEl){
+  // select-all-and-copy, the way that works by hand on iPhone
+  const box = document.createElement("textarea");
+  box.value = text; box.setAttribute("readonly", ""); box.style.cssText = "position:fixed;top:0;left:0;opacity:0;";
+  document.body.appendChild(box); box.focus(); box.select(); box.setSelectionRange(0, text.length);
+  let ok = false; try { ok = document.execCommand("copy"); } catch(e){}
+  box.remove();
+  return ok ? Promise.resolve(true) : (navigator.clipboard ? navigator.clipboard.writeText(text).then(() => true, () => false) : Promise.resolve(false));
 }
 const famHtml = f => String(f).split(/\s*\/\s*|\n/).filter(Boolean).map(esc).join("<br>");
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
@@ -285,10 +306,10 @@ function renderStudy(){
     <div class="back">
       ${ui.dir === "ja" && !sent ? `<p class="word" style="margin:0">${esc(k.w)}</p>` : ""}
       ${k.def && ui.dir==="en" ? `<div><span class="lab">Meaning</span><div class="def">${esc(k.def)}</div></div>` : ""}
-      ${k.exS ? `<div><span class="lab">Speaking</span><div class="ex">${esc(k.exS)}</div></div>` : ""}
-      ${k.exR ? `<div><span class="lab">Reading</span><div class="ex">${esc(k.exR)}</div></div>` : ""}
+      ${k.exS ? `<div><span class="lab">Speaking <button class="mini" data-addex="exS">＋カードに</button></span><div class="ex">${esc(k.exS)}</div></div>` : ""}
+      ${k.exR ? `<div><span class="lab">Reading <button class="mini" data-addex="exR">＋カードに</button></span><div class="ex">${esc(k.exR)}</div></div>` : ""}
       ${k.fam ? `<div><span class="lab">Word family</span><div class="fam">${famHtml(k.fam)}</div></div>` : ""}
-      ${sent && k.ja ? `<div><span class="lab">直訳</span><div class="ja">${esc(k.ja)}</div></div>` : k.ja ? (ui.showJa ? `<div><span class="lab">日本語</span><div class="ja">${esc(k.ja)}</div></div>` : `<div><button class="speak" id="show-ja">日本語訳を見る</button></div>`) : ""}
+      ${sent && k.ja ? `<div><span class="lab">直訳</span><div class="ja">${esc(k.ja)}</div></div>` : sent ? `<p class="note" style="margin:0">直訳はまだありません。単語カードアプリで追加して「復習版に送る」で戻すと付きます。</p>` : k.ja ? (ui.showJa ? `<div><span class="lab">日本語</span><div class="ja">${esc(k.ja)}</div></div>` : `<div><button class="speak" id="show-ja">日本語訳を見る</button></div>`) : ""}
     </div>`;
   v.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:12px">
@@ -308,6 +329,7 @@ function renderStudy(){
   const flip = () => { s.flipped = true; renderStudy(); };
   $("#card").onclick = e => {
     if (e.target.closest("#say")) return;
+    const ax = e.target.closest("[data-addex]"); if (ax) return addExample(k[ax.dataset.addex]);
     if (e.target.closest("#del-card")) return askDelete(k, () => { s.ids.splice(s.i, 1); s.flipped = false; ui.showJa = false; renderStudy(); });
     if (e.target.closest("#show-ja")){ ui.showJa = true; return renderStudy(); }
     if (!s.flipped) flip();
@@ -345,8 +367,8 @@ function renderList(){
             <span class="m">${esc(k.def || k.ja || "")}</span>
             ${ui.open === k.id ? `
             <div class="detail">
-              ${k.exS ? `<div><span class="lab">Speaking</span><div class="ex">${esc(k.exS)}</div></div>`:""}
-              ${k.exR ? `<div><span class="lab">Reading</span><div class="ex">${esc(k.exR)}</div></div>`:""}
+              ${k.exS ? `<div><span class="lab">Speaking <button class="mini" data-addex="exS">＋カードに</button></span><div class="ex">${esc(k.exS)}</div></div>`:""}
+              ${k.exR ? `<div><span class="lab">Reading <button class="mini" data-addex="exR">＋カードに</button></span><div class="ex">${esc(k.exR)}</div></div>`:""}
               ${k.fam ? `<div><span class="lab">Word family</span><div class="fam">${famHtml(k.fam)}</div></div>` : ""}
               ${k.ja ? `<div><span class="lab">日本語</span><div>${esc(k.ja)}</div></div>`:""}
               <div class="row">
@@ -368,6 +390,7 @@ function renderList(){
     const id = el.dataset.id, k = state.cards.find(c=>c.id===id);
     const t = e.target.closest("button");
     if (t && t.dataset.set){ k.s = t.dataset.set; save(); toast(`「${k.w}」を${LABEL[k.s]}に移動`); return renderList(); }
+    if (t && t.dataset.addex) return addExample(k[t.dataset.addex]);
     if (t && t.hasAttribute("data-say")) return speak(k.w);
     if (t && t.hasAttribute("data-del")) return askDelete(k, () => { ui.open = null; renderList(); });
     if (e.target.closest(".detail")) return;
@@ -393,14 +416,24 @@ function importCode(text){
     if (have){ Object.assign(have, fields); if (fromBackup) have.s = x.s; updated++; }   // keep its review status
     else { const k = {id:uid(), w, ...fields, s: fromBackup ? x.s : "new", n:0, t:0}; state.cards.push(k); byWord.set(w.toLowerCase(), k); added++; }
   });
+  state.pending = (state.pending || []).filter(t => { const c = byWord.get(t.toLowerCase()); return !(c && c.ja); });
   save();
   return {added, updated};
 }
 
 function renderAdd(){
   const v = $("#v-add");
+  const pend = state.pending || [];
   v.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:16px">
+      ${pend.length ? `
+      <div class="panel">
+        <span class="h2">単語帳に追加したい例文（${pend.length}件）</span>
+        <div class="fam">${pend.map(esc).join("<br>")}</div>
+        <p class="note" style="margin:0">「まとめてコピー」を押して、単語カードアプリの「追加」→「まとめて追加」に貼り付けると直訳が付きます。そのあと「復習版に送る」でここに戻すと、カードにも直訳が入り、このリストから自動で消えます。</p>
+        <div class="row"><button class="primary" id="pend-copy" style="width:auto;flex:1">まとめてコピー</button><button class="ghost" id="pend-clear">リストを空にする</button></div>
+        <p class="note" id="pend-msg" style="margin:0"></p>
+      </div>` : ""}
       <div class="panel">
         <span class="h2">単語を読み込む</span>
         <p class="note" style="margin:0">1. <a href="${ADD_URL}" target="_blank" rel="noopener">単語を作るアプリ</a>（claude.ai）で単語を追加<br>2. そのアプリの「単語リスト」で「復習版に送る」を押す<br>3. 下の枠に貼り付けて「読み込む」</p>
@@ -419,6 +452,10 @@ function renderAdd(){
       </div>
       <p class="note" style="text-align:center">アプリのバージョン ${APP_VERSION}</p>
     </div>`;
+  if ($("#pend-copy")) $("#pend-copy").onclick = () => copyText(pend.join("\n")).then(ok => {
+    $("#pend-msg").textContent = ok ? `${pend.length}件をコピーしました。単語カードアプリの「まとめて追加」に貼り付けてください。` : "コピーできませんでした。";
+  });
+  if ($("#pend-clear")) $("#pend-clear").onclick = () => { state.pending = []; save(); renderAdd(); toast("リストを空にしました（カードは残っています）"); };
   $("#paste-import").onclick = async () => {
     const msg = $("#import-msg");
     let text = "";
