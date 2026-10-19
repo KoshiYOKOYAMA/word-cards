@@ -152,7 +152,7 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "13";
+const APP_VERSION = "14";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -318,7 +318,7 @@ function renderStudy(){
       ${k.exS ? `<div><span class="lab">Speaking <button class="mini" data-addex="exS">＋カードに</button></span><div class="ex">${esc(k.exS)}</div></div>` : ""}
       ${k.exR ? `<div><span class="lab">Reading <button class="mini" data-addex="exR">＋カードに</button></span><div class="ex">${esc(k.exR)}</div></div>` : ""}
       ${k.fam ? `<div><span class="lab">Word family</span><div class="fam">${famHtml(k.fam)}</div></div>` : ""}
-      ${sent && k.ja ? `<div><span class="lab">直訳</span><div class="ja">${esc(k.ja)}</div></div>` : sent ? `<p class="note" style="margin:0">直訳はまだありません。単語カードアプリで追加して「復習版に送る」で戻すと付きます。</p>` : k.ja ? (ui.showJa ? `<div><span class="lab">日本語</span><div class="ja">${esc(k.ja)}</div></div>` : `<div><button class="speak" id="show-ja">日本語訳を見る</button></div>`) : ""}
+      ${sent && k.ja ? `<div><span class="lab">直訳</span><div class="ja">${esc(k.ja)}</div></div>${k.idm ? `<div><span class="lab">慣用句</span><div class="fam">${famHtml(k.idm)}</div></div>` : ""}` : sent ? `<p class="note" style="margin:0">直訳はまだありません。単語カードアプリで追加して「復習版に送る」で戻すと付きます。</p>` : k.ja ? (ui.showJa ? `<div><span class="lab">日本語</span><div class="ja">${esc(k.ja)}</div></div>` : `<div><button class="speak" id="show-ja">日本語訳を見る</button></div>`) : ""}
     </div>`;
   v.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:12px">
@@ -428,7 +428,7 @@ function importCode(text){
   arr.forEach(x => {
     const w = x ? str(x.w).trim() : "";
     if (!w) return;
-    const fields = {ja:str(x.ja), def:str(x.def), exS:str(x.exS), exR:str(x.exR), fam:str(x.fam), kind:str(x.kind), pos:str(x.pos)};
+    const fields = {ja:str(x.ja), def:str(x.def), exS:str(x.exS), exR:str(x.exR), fam:str(x.fam), kind:str(x.kind), pos:str(x.pos), idm:str(x.idm)};
     const have = byWord.get(w.toLowerCase());
     const fromBackup = m[1] === "WORDCARDS-BACKUP1" && LABEL[x.s];
     if (have){ Object.assign(have, fields); if (fromBackup) have.s = x.s; if ((x.look||1) > looks(have)) have.look = x.look; updated++; }   // keep its review status
@@ -501,7 +501,7 @@ function renderAdd(){
     }
   };
   $("#backup").onclick = async () => {
-    const code = "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, fam:k.fam||"", kind:k.kind||"", pos:k.pos||"", look:looks(k), s:k.s})));
+    const code = "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, fam:k.fam||"", kind:k.kind||"", pos:k.pos||"", idm:k.idm||"", look:looks(k), s:k.s})));
     const msg = $("#backup-msg");
     // select-all-and-copy, the way that works by hand on iPhone
     msg.innerHTML = `<span id="backup-status"></span><textarea id="backup-box" rows="3" style="margin-top:6px;font-size:12px" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>`;
