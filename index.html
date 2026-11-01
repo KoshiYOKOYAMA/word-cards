@@ -152,7 +152,7 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "14";
+const APP_VERSION = "15";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -238,9 +238,40 @@ function startSession(group, ids){
   ui.session = {ids: cards.map(k=>k.id), i:0, flipped:false, res:{ok:[],meh:[],ng:[]}};
   ui.showJa = false; render();
 }
-function speak(text){
-  try { const u = new SpeechSynthesisUtterance(text); u.lang="en-US"; u.rate=.9; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch(e){}
+// Pronunciation with the phone's built-in voice. iPhone's speech engine can get stuck
+// (after the app sits in the background) or drop a word that is cancelled and spoken
+// in the same instant, so: wake it up, only cancel when something is really playing,
+// pick an installed English voice, and retry once if nothing starts.
+let lastUtterance = null;   // keep a reference: a garbage-collected utterance can jam the engine
+function englishVoice(){
+  try {
+    const vs = speechSynthesis.getVoices().filter(v => /^en[-_]/i.test(v.lang));
+    return vs.find(v => /en[-_]US/i.test(v.lang) && v.localService) || vs.find(v => v.localService) || vs[0] || null;
+  } catch(e){ return null; }
 }
+function speak(text, retried){
+  if (!("speechSynthesis" in window) || !window.SpeechSynthesisUtterance){ toast("この端末では発音を再生できません"); return; }
+  const ss = window.speechSynthesis;
+  try {
+    ss.resume();                                   // un-stick a paused engine
+    if (ss.speaking || ss.pending) ss.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    const v = englishVoice(); if (v) u.voice = v;
+    u.lang = v ? v.lang : "en-US"; u.rate = .9; u.volume = 1;
+    let started = false;
+    u.onstart = () => { started = true; };
+    lastUtterance = u;
+    ss.speak(u);
+    setTimeout(() => {
+      if (started || lastUtterance !== u) return;
+      if (!retried){ try { ss.cancel(); } catch(e){} return speak(text, true); }
+      toast("音が出ません。消音モードと音量を確認してください。直らないときはアプリを一度閉じて開き直してください。");
+    }, 1500);
+  } catch(e){ toast("発音を再生できませんでした"); }
+}
+// coming back to the app: clear anything left stuck in the speech queue
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible"){ try { speechSynthesis.cancel(); } catch(e){} } });
+try { speechSynthesis.getVoices(); speechSynthesis.onvoiceschanged = () => speechSynthesis.getVoices(); } catch(e){}
 
 function render(){
   document.querySelectorAll("nav button").forEach(b => b.setAttribute("aria-selected", b.dataset.tab === ui.tab));
