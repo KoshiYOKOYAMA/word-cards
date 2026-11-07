@@ -153,7 +153,7 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "19";
+const APP_VERSION = "20";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -220,10 +220,67 @@ const toast = msg => { const t=$("#toast"); t.textContent=msg; t.classList.add("
 let state = {cards: []};
 let ui = {tab:"study", dir:"en", session:null, filter:"all", q:"", open:null, showJa:false};
 
-function load(){ try{ const s = JSON.parse(localStorage.getItem(KEY)||"null"); if (s && Array.isArray(s.cards)) state = s; }catch(e){} }
+/* ---------- storage ----------
+   Cards live in IndexedDB (the phone's large store, sized by free space), not in
+   localStorage (about 5 MB, full at roughly 8,000-9,000 cards).
+   The first time this version opens, the old localStorage copy is copied over and
+   checked; the old copy is left in place as a spare and never deleted. */
+const IDB_NAME = "wordcards", IDB_STORE = "kv", IDB_KEY = "state";
+let idb = null;          // open database, or null when this browser cannot use IndexedDB
+function openIdb(){
+  return new Promise(resolve => {
+    try {
+      const req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = () => req.result.createObjectStore(IDB_STORE);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => resolve(null);
+      req.onblocked = () => resolve(null);
+    } catch(e){ resolve(null); }
+  });
+}
+function idbGet(){
+  return new Promise((resolve, reject) => {
+    const r = idb.transaction(IDB_STORE).objectStore(IDB_STORE).get(IDB_KEY);
+    r.onsuccess = () => resolve(r.result); r.onerror = () => reject(r.error);
+  });
+}
+function idbPut(text){
+  return new Promise((resolve, reject) => {
+    const tx = idb.transaction(IDB_STORE, "readwrite");
+    tx.objectStore(IDB_STORE).put(text, IDB_KEY);
+    tx.oncomplete = () => resolve(); tx.onerror = tx.onabort = () => reject(tx.error);
+  });
+}
+const parseState = t => { try { const s = JSON.parse(t || "null"); return s && Array.isArray(s.cards) ? s : null; } catch(e){ return null; } };
+function readOld(){ try { return parseState(localStorage.getItem(KEY)); } catch(e){ return null; } }
+async function load(){
+  idb = await openIdb();
+  const old = readOld();
+  if (!idb){ if (old) state = old; return; }            // no IndexedDB here: keep using the old store
+  let cur = null;
+  try { cur = parseState(await idbGet()); } catch(e){}
+  if (cur){ state = cur; return; }
+  if (!old) return;                                     // nothing saved anywhere yet
+  // move: copy the old store over, read it back and check the count before trusting it
+  try {
+    await idbPut(JSON.stringify(old));
+    const back = parseState(await idbGet());
+    if (!back || back.cards.length !== old.cards.length) throw new Error("count");
+    state = back;
+  } catch(e){
+    idb = null; state = old;                            // move failed: stay on the old store for now
+  }
+}
+let saving = Promise.resolve();
 function save(){
-  try{ localStorage.setItem(KEY, JSON.stringify(state)); }
-  catch(e){ toast("保存できませんでした。プライベートブラウズを切ってください。"); }
+  const text = JSON.stringify(state);
+  if (!idb){
+    try { localStorage.setItem(KEY, text); }
+    catch(e){ toast("保存できませんでした。プライベートブラウズを切ってください。"); }
+    return;
+  }
+  // one write at a time, in order, so an older copy can never land after a newer one
+  saving = saving.then(() => idbPut(text)).catch(() => toast("保存できませんでした。アプリを開き直してください。"));
 }
 try { const d = localStorage.getItem("wordcards.dir"); if (d) ui.dir = d; } catch(e){}
 
@@ -613,7 +670,8 @@ addEventListener("error", e => toast("エラー: " + (e.message || "不明なエ
 const setNet = () => { $("#sync").textContent = navigator.onLine ? "オフライン対応" : "オフラインで使用中"; };
 addEventListener("online", setNet); addEventListener("offline", setNet);
 
-load(); setNet(); render();
+setNet();
+load().then(render, render);
 if ("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(() => {});
 if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {});
 })();
