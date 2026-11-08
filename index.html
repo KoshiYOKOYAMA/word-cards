@@ -153,7 +153,7 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "20";
+const APP_VERSION = "21";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -448,7 +448,9 @@ function renderStudy(){
   });
 }
 
-function renderList(){
+// listOnly: while typing a search, update just the word list and leave the search box itself alone,
+// so holding the delete key keeps deleting and the keyboard stays open
+function renderList(listOnly){
   const v = $("#v-list");
   const c = counts();
   const q = ui.q.trim().toLowerCase();
@@ -456,7 +458,7 @@ function renderList(){
   if (q) items = items.filter(k => (k.w+" "+(k.ja||"")+" "+(k.def||"")).toLowerCase().includes(q));
   if (ui.sort === "look") items.sort((a,b) => looks(b)-looks(a) || (b.lastLook||0)-(a.lastLook||0) || a.w.localeCompare(b.w));
   else items.sort((a,b)=>a.w.localeCompare(b.w));
-  v.innerHTML = `
+  const html = `
     <div style="display:flex;flex-direction:column;gap:12px">
       <input type="search" id="q" placeholder="単語・意味で検索" value="${esc(ui.q)}">
       <div class="row" style="justify-content:space-between">
@@ -494,8 +496,12 @@ function renderList(){
           </div>`).join("") : `<div class="empty">${state.cards.length ? "この分類の単語はありません" : "まだ単語がありません"}</div>`}
       </div>
     </div>`;
+  if (listOnly && v.querySelector(".list")){
+    const tmp = document.createElement("div"); tmp.innerHTML = html;
+    v.querySelector(".list").replaceWith(tmp.querySelector(".list"));
+  } else v.innerHTML = html;
   const qi = $("#q");
-  qi.oninput = () => { ui.q = qi.value; const pos = qi.selectionStart; renderList(); const n=$("#q"); n.focus(); n.setSelectionRange(pos,pos); };
+  qi.oninput = () => { ui.q = qi.value; renderList(true); };
   v.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { ui.filter = b.dataset.f; renderList(); });
   v.querySelectorAll("[data-sort]").forEach(b => b.onclick = () => { ui.sort = b.dataset.sort; renderList(); });
   v.querySelectorAll(".item").forEach(el => el.onclick = e => {
