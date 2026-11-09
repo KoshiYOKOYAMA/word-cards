@@ -72,6 +72,9 @@ button{font:inherit;color:inherit}
 .pos{font-family:var(--font-word);font-style:italic;color:var(--muted);font-size:16px;margin:2px 0 0}
 .pos-s{font-family:var(--font-word);font-weight:400;font-size:13px;color:var(--muted)}
 .nua{font-size:14px;line-height:1.7}
+.pr{font-family:var(--font-word);font-size:18px;color:var(--muted);margin:0;letter-spacing:.02em;overflow-wrap:anywhere}
+.pr b{color:var(--accent);font-weight:700;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px}
+.ipa{font-family:"Charis SIL","Doulos SIL","Lucida Grande",-apple-system,system-ui,sans-serif;font-size:14px;letter-spacing:0;margin-left:6px}
 .chip.look{background:transparent;color:var(--accent);border:1px solid var(--accent);white-space:nowrap}
 .chip.ok{background:var(--ok-bg);color:var(--ok)} .chip.meh{background:var(--meh-bg);color:var(--meh)} .chip.ng{background:var(--ng-bg);color:var(--ng)} .chip.new{background:var(--new-bg);color:var(--new)}
 .word{font-family:var(--font-word);font-size:clamp(30px,9vw,42px);font-weight:700;line-height:1.15;margin:18px 0 0;overflow-wrap:anywhere;text-wrap:balance}
@@ -153,13 +156,19 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "22";
+const APP_VERSION = "23";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
 const uid = () => Math.random().toString(36).slice(2,10) + Date.now().toString(36).slice(-4);
 const str = x => Array.isArray(x) ? x.map(str).join(", ") : (x == null ? "" : typeof x === "object" ? Object.values(x).map(str).join(", ") : String(x));
 const $ = (s, r=document) => r.querySelector(s);
+// Accent: "ac·COM·mo·date" -> the syllable in capitals is the one said strongest; drawn bold and underlined.
+const prHtml = k => {
+  if (!k.pr && !k.ipa) return "";
+  const pr = String(k.pr || "").split(/(\s+)/).map(w => w.split("·").map(sy => /[A-Z]/.test(sy) && sy === sy.toUpperCase() ? `<b>${esc(sy.toLowerCase())}</b>` : esc(sy)).join("·")).join("");
+  return `<p class="pr" aria-label="アクセント">${pr}${k.ipa ? `<span class="ipa">${esc(k.ipa)}</span>` : ""}</p>`;
+};
 const isSentence = k => k.kind === "sentence" || (!k.kind && /\s/.test(k.w) && k.w.trim().split(/\s+/).length >= 6);
 // Delete with a confirmation screen (the viewer never shows confirm() dialogs)
 function askDelete(k, after){
@@ -400,18 +409,19 @@ function renderStudy(){
   if (!k){ s.i++; return renderStudy(); }
   const sent = isSentence(k);
   const front = (ui.dir === "en" || sent)
-    ? `<p class="word${sent?" sent":""}">${esc(k.w)}</p>${!sent && k.pos ? `<p class="pos">${esc(k.pos)}</p>` : ""}`
+    ? `<p class="word${sent?" sent":""}">${esc(k.w)}</p>${sent ? "" : prHtml(k)}${!sent && k.pos ? `<p class="pos">${esc(k.pos)}</p>` : ""}`
     : `<p class="prompt-ja">${esc(k.def || k.ja)}</p>`;
   const back = `
     <div class="back">
-      ${ui.dir === "ja" && !sent ? `<p class="word" style="margin:0">${esc(k.w)}</p>${k.pos ? `<p class="pos">${esc(k.pos)}</p>` : ""}` : ""}
+      ${ui.dir === "ja" && !sent ? `<p class="word" style="margin:0">${esc(k.w)}</p>${prHtml(k)}${k.pos ? `<p class="pos">${esc(k.pos)}</p>` : ""}` : ""}
       ${k.sense ? `<div><span class="lab">用法</span><div>${esc(k.sense)}</div></div>` : ""}
       ${k.def && ui.dir==="en" ? `<div><span class="lab">Meaning</span><div class="def">${esc(k.def)}</div></div>` : ""}
       ${k.exS ? `<div><span class="lab">Speaking <button class="mini" data-addex="exS">＋カードに</button></span><div class="ex">${esc(k.exS)}</div></div>` : ""}
       ${k.exR ? `<div><span class="lab">Reading <button class="mini" data-addex="exR">＋カードに</button></span><div class="ex">${esc(k.exR)}</div></div>` : ""}
       ${k.nua ? `<div><span class="lab">ニュアンス</span><div class="nua">${esc(k.nua)}</div></div>` : ""}
+      ${k.fun ? `<div><span class="lab">笑いどころ・ポイント</span><div class="nua">${esc(k.fun)}</div></div>` : ""}
       ${k.fam ? `<div><span class="lab">Word family</span><div class="fam">${famHtml(k.fam)}</div></div>` : ""}
-      ${sent && k.ja ? `<div><span class="lab">直訳</span><div class="ja">${esc(k.ja)}</div></div>${k.idm ? `<div><span class="lab">慣用句</span><div class="fam">${famHtml(k.idm)}</div></div>` : ""}` : sent ? `<p class="note" style="margin:0">直訳はまだありません。単語カードアプリで追加して「復習版に送る」で戻すと付きます。</p>` : k.ja ? (ui.showJa ? `<div><span class="lab">日本語</span><div class="ja">${esc(k.ja)}</div></div>` : `<div><button class="speak" id="show-ja">日本語訳を見る</button></div>`) : ""}
+      ${sent && k.ja ? `<div><span class="lab">${k.cas ? "意訳" : "直訳"}</span><div class="ja">${esc(k.ja)}</div></div>${k.idm ? `<div><span class="lab">${k.cas ? "スラング・慣用句" : "慣用句"}</span><div class="fam">${famHtml(k.idm)}</div></div>` : ""}` : sent ? `<p class="note" style="margin:0">直訳はまだありません。単語カードアプリで追加して「復習版に送る」で戻すと付きます。</p>` : k.ja ? (ui.showJa ? `<div><span class="lab">日本語</span><div class="ja">${esc(k.ja)}</div></div>` : `<div><button class="speak" id="show-ja">日本語訳を見る</button></div>`) : ""}
     </div>`;
   v.innerHTML = `
     <div style="display:flex;flex-direction:column;gap:12px">
@@ -479,11 +489,14 @@ function renderList(listOnly){
             <span class="m">${esc(k.def || k.ja || "")}</span>
             ${ui.open === k.id ? `
             <div class="detail">
+              ${isSentence(k) ? "" : prHtml(k)}
               ${k.exS ? `<div><span class="lab">Speaking <button class="mini" data-addex="exS">＋カードに</button></span><div class="ex">${esc(k.exS)}</div></div>`:""}
               ${k.exR ? `<div><span class="lab">Reading <button class="mini" data-addex="exR">＋カードに</button></span><div class="ex">${esc(k.exR)}</div></div>`:""}
               ${k.nua ? `<div><span class="lab">ニュアンス</span><div class="nua">${esc(k.nua)}</div></div>` : ""}
+      ${k.fun ? `<div><span class="lab">笑いどころ・ポイント</span><div class="nua">${esc(k.fun)}</div></div>` : ""}
               ${k.fam ? `<div><span class="lab">Word family</span><div class="fam">${famHtml(k.fam)}</div></div>` : ""}
-              ${k.ja ? `<div><span class="lab">日本語</span><div>${esc(k.ja)}</div></div>`:""}
+              ${k.ja ? `<div><span class="lab">${isSentence(k) ? (k.cas ? "意訳" : "直訳") : "日本語"}</span><div>${esc(k.ja)}</div></div>`:""}
+              ${k.idm ? `<div><span class="lab">${k.cas ? "スラング・慣用句" : "慣用句"}</span><div class="fam">${famHtml(k.idm)}</div></div>`:""}
               <div class="row">
                 <span class="note">分類を変える:</span>
                 ${["ng","meh","ok","new"].map(g=>`<button class="speak" data-set="${g}">${LABEL[g]}</button>`).join("")}
@@ -530,7 +543,7 @@ function importCode(text){
   arr.forEach(x => {
     const w = x ? str(x.w).trim() : "";
     if (!w) return;
-    const fields = {ja:str(x.ja), def:str(x.def), exS:str(x.exS), exR:str(x.exR), fam:str(x.fam), kind:str(x.kind), pos:str(x.pos), idm:str(x.idm), nua:str(x.nua), sense:str(x.sense)};
+    const fields = {ja:str(x.ja), def:str(x.def), exS:str(x.exS), exR:str(x.exR), fam:str(x.fam), kind:str(x.kind), pos:str(x.pos), idm:str(x.idm), nua:str(x.nua), sense:str(x.sense), pr:str(x.pr), ipa:str(x.ipa), fun:str(x.fun), cas:str(x.cas)};
     const have = byWord.get(keyOf(w, x.sense));
     const fromBackup = m[1] === "WORDCARDS-BACKUP1" && LABEL[x.s];
     if (have){ Object.assign(have, fields); if (fromBackup) have.s = x.s; if ((x.look||1) > looks(have)) have.look = x.look; updated++; }   // keep its review status
@@ -549,7 +562,7 @@ function lastBackupText(){
   return `前回の保存: ${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
 function backupCode(){
-  return "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, fam:k.fam||"", kind:k.kind||"", pos:k.pos||"", idm:k.idm||"", nua:k.nua||"", sense:k.sense||"", look:looks(k), s:k.s})));
+  return "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, fam:k.fam||"", kind:k.kind||"", pos:k.pos||"", idm:k.idm||"", nua:k.nua||"", sense:k.sense||"", pr:k.pr||"", ipa:k.ipa||"", fun:k.fun||"", cas:k.cas||"", look:looks(k), s:k.s})));
 }
 // keep the save button's word count right after cards are loaded on this screen
 function refreshBackupBtn(){
