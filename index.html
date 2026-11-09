@@ -74,7 +74,6 @@ button{font:inherit;color:inherit}
 .nua{font-size:14px;line-height:1.7}
 .pr{font-family:var(--font-word);font-size:18px;color:var(--muted);margin:0;letter-spacing:.02em;overflow-wrap:anywhere}
 .pr b{color:var(--accent);font-weight:700;text-decoration:underline;text-decoration-thickness:2px;text-underline-offset:4px}
-.ipa{font-family:"Charis SIL","Doulos SIL","Lucida Grande",-apple-system,system-ui,sans-serif;font-size:14px;letter-spacing:0;margin-left:6px}
 .chip.look{background:transparent;color:var(--accent);border:1px solid var(--accent);white-space:nowrap}
 .chip.ok{background:var(--ok-bg);color:var(--ok)} .chip.meh{background:var(--meh-bg);color:var(--meh)} .chip.ng{background:var(--ng-bg);color:var(--ng)} .chip.new{background:var(--new-bg);color:var(--new)}
 .word{font-family:var(--font-word);font-size:clamp(30px,9vw,42px);font-weight:700;line-height:1.15;margin:18px 0 0;overflow-wrap:anywhere;text-wrap:balance}
@@ -156,7 +155,7 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "23";
+const APP_VERSION = "24";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -165,9 +164,9 @@ const str = x => Array.isArray(x) ? x.map(str).join(", ") : (x == null ? "" : ty
 const $ = (s, r=document) => r.querySelector(s);
 // Accent: "ac·COM·mo·date" -> the syllable in capitals is the one said strongest; drawn bold and underlined.
 const prHtml = k => {
-  if (!k.pr && !k.ipa) return "";
+  if (!k.pr) return "";
   const pr = String(k.pr || "").split(/(\s+)/).map(w => w.split("·").map(sy => /[A-Z]/.test(sy) && sy === sy.toUpperCase() ? `<b>${esc(sy.toLowerCase())}</b>` : esc(sy)).join("·")).join("");
-  return `<p class="pr" aria-label="アクセント">${pr}${k.ipa ? `<span class="ipa">${esc(k.ipa)}</span>` : ""}</p>`;
+  return `<p class="pr" aria-label="アクセント">${pr}</p>`;
 };
 const isSentence = k => k.kind === "sentence" || (!k.kind && /\s/.test(k.w) && k.w.trim().split(/\s+/).length >= 6);
 // Delete with a confirmation screen (the viewer never shows confirm() dialogs)
@@ -543,7 +542,7 @@ function importCode(text){
   arr.forEach(x => {
     const w = x ? str(x.w).trim() : "";
     if (!w) return;
-    const fields = {ja:str(x.ja), def:str(x.def), exS:str(x.exS), exR:str(x.exR), fam:str(x.fam), kind:str(x.kind), pos:str(x.pos), idm:str(x.idm), nua:str(x.nua), sense:str(x.sense), pr:str(x.pr), ipa:str(x.ipa), fun:str(x.fun), cas:str(x.cas)};
+    const fields = {ja:str(x.ja), def:str(x.def), exS:str(x.exS), exR:str(x.exR), fam:str(x.fam), kind:str(x.kind), pos:str(x.pos), idm:str(x.idm), nua:str(x.nua), sense:str(x.sense), pr:str(x.pr), fun:str(x.fun), cas:str(x.cas)};
     const have = byWord.get(keyOf(w, x.sense));
     const fromBackup = m[1] === "WORDCARDS-BACKUP1" && LABEL[x.s];
     if (have){ Object.assign(have, fields); if (fromBackup) have.s = x.s; if ((x.look||1) > looks(have)) have.look = x.look; updated++; }   // keep its review status
@@ -562,7 +561,7 @@ function lastBackupText(){
   return `前回の保存: ${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
 function backupCode(){
-  return "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, fam:k.fam||"", kind:k.kind||"", pos:k.pos||"", idm:k.idm||"", nua:k.nua||"", sense:k.sense||"", pr:k.pr||"", ipa:k.ipa||"", fun:k.fun||"", cas:k.cas||"", look:looks(k), s:k.s})));
+  return "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, fam:k.fam||"", kind:k.kind||"", pos:k.pos||"", idm:k.idm||"", nua:k.nua||"", sense:k.sense||"", pr:k.pr||"", fun:k.fun||"", cas:k.cas||"", look:looks(k), s:k.s})));
 }
 // keep the save button's word count right after cards are loaded on this screen
 function refreshBackupBtn(){
