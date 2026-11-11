@@ -1,6 +1,6 @@
 // Keeps the app's files on the phone so it opens without a connection.
 // Bump VERSION whenever index.html changes so phones pick up the new copy.
-const VERSION = "v24";
+const VERSION = "v25";
 const FILES = ["./", "./index.html", "./manifest.json", "./icon-180.png", "./icon-512.png"];
 
 self.addEventListener("install", e => {
@@ -16,10 +16,10 @@ self.addEventListener("activate", e => {
   );
 });
 
-// Network first so updates arrive, but on a weak signal don't wait: if the network
-// hasn't answered within NETWORK_WAIT_MS, open the saved copy. The download keeps
-// going in the background and refreshes the saved copy for next time.
-const NETWORK_WAIT_MS = 2500;
+// Saved copy first, so the app opens at once even on a weak signal (it used to wait up to
+// 2.5 s for the network). The newest files are still fetched in the background for next time,
+// and a new VERSION is installed by the browser's own update check; the page then offers
+// "tap to update".
 self.addEventListener("fetch", e => {
   if (e.request.method !== "GET") return;
   const url = new URL(e.request.url);
@@ -33,10 +33,7 @@ self.addEventListener("fetch", e => {
       if (res.ok) cache.put(key, res.clone());
       return res;
     });
-    e.waitUntil(network.then(() => {}, () => {}));
-    if (!saved) return network.catch(() => cache.match("./index.html"));
-    const timeout = new Promise(resolve => setTimeout(() => resolve(null), NETWORK_WAIT_MS));
-    try { return (await Promise.race([network, timeout])) || saved; }
-    catch (err) { return saved; }                    // offline: the request failed right away
+    if (saved){ e.waitUntil(network.then(() => {}, () => {})); return saved; }
+    return network.catch(() => cache.match("./index.html"));
   })());
 });
