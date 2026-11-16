@@ -156,7 +156,7 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "25";
+const APP_VERSION = "26";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -293,9 +293,31 @@ function save(){
 }
 try { const d = localStorage.getItem("wordcards.dir"); if (d) ui.dir = d; } catch(e){}
 
+/* ---------- forgetting curve ---------- */
+// Each card comes back after a growing gap while you keep getting it right
+// (1, 3, 7, 14, 30, 60, 120 days). "あいまい" brings it back sooner, "忘れた" starts it over from tomorrow.
+// Two small numbers per card: lv (step on the curve) and due (the day it comes back).
+const GAPS = [1, 3, 7, 14, 30, 60, 120], DAY = 864e5;
+const dayStart = t => { const d = new Date(t); d.setHours(0,0,0,0); return d.getTime(); };
+function dueAt(k){
+  if (k.due) return k.due;
+  if (!k.t || k.s === "new") return null;                          // never reviewed yet: not on the curve
+  return dayStart(k.t) + ({ng:1, meh:3, ok:7}[k.s] || 1) * DAY;   // older cards: guessed from the last rating
+}
+function schedule(k, r){
+  const lv = k.lv != null ? k.lv : ({ok:1, meh:0}[k.s] ?? -1);
+  k.lv = r === "ng" ? 0 : r === "meh" ? Math.max(0, lv) : Math.min(GAPS.length - 1, lv + 1);
+  const days = r === "ng" ? 1 : r === "meh" ? Math.ceil(GAPS[k.lv] / 2) : GAPS[k.lv];
+  k.due = dayStart(Date.now()) + days * DAY;
+}
+const curveDue = () => { const now = Date.now(); return state.cards.filter(k => { const d = dueAt(k); return d != null && d <= now; }); };
+const curveTomorrow = () => { const a = Date.now(), b = dayStart(a) + 2 * DAY; return state.cards.filter(k => { const d = dueAt(k); return d != null && d > a && d < b; }).length; };
+const dueLabel = k => { const d = dueAt(k); if (d == null) return ""; const t = dayStart(Date.now()); if (d <= t) return "今日"; const n = Math.round((d - t) / DAY); return n === 1 ? "明日" : `${new Date(d).getMonth()+1}/${new Date(d).getDate()}（${n}日後）`; };
+
 const counts = () => { const c={new:0,ng:0,meh:0,ok:0}; state.cards.forEach(k=>c[k.s]++); return c; };
 function pool(group){
   const C = state.cards;
+  if (group === "curve") return curveDue();
   if (group === "due") return C.filter(k => k.s !== "ok");
   if (group === "all") return C.slice();
   return C.filter(k => k.s === group);
@@ -358,12 +380,18 @@ function renderStudy(){
   if (!s){
     const c = counts(), total = state.cards.length || 1;
     const due = c.ng + c.meh + c.new;
+    const cd = curveDue().length, tm = curveTomorrow();
     v.innerHTML = state.cards.length ? `
       <div style="display:flex;flex-direction:column;gap:14px">
         <div class="bar" aria-label="覚えた割合">
           <span style="width:${c.ok/total*100}%;background:var(--ok)"></span>
           <span style="width:${c.meh/total*100}%;background:var(--meh)"></span>
           <span style="width:${c.ng/total*100}%;background:var(--ng)"></span>
+        </div>
+        <div class="panel" style="gap:8px">
+          <span class="h2">忘却曲線</span>
+          <button class="primary" data-start="curve" ${cd?"":"disabled"}>今日の復習（${cd}枚）</button>
+          <p class="note" style="margin:0">${cd ? "" : "今日の分は終わりました。"}${tm ? `明日は${tm}枚。` : ""}覚えたカードも、忘れかけた頃（1→3→7→14→30日…）にもう一度出ます。</p>
         </div>
         <div class="tiles">
           ${["ng","meh","new","ok"].map(g => `
@@ -452,6 +480,7 @@ function renderStudy(){
   if ($("#flip")) $("#flip").onclick = flip;
   v.querySelectorAll("[data-rate]").forEach(b => b.onclick = () => {
     const r = b.dataset.rate;
+    schedule(k, r);
     k.s = r; k.n = (k.n||0)+1; k.t = Date.now();
     s.res[r].push(k.id); s.i++; s.flipped = false; ui.showJa = false;
     save(); renderStudy();
@@ -498,6 +527,7 @@ function renderList(listOnly){
               ${k.ja ? `<div><span class="lab">${isSentence(k) ? (k.cas ? "意訳" : "直訳") : "日本語"}</span><div>${esc(k.ja)}</div></div>`:""}
               ${k.idm ? `<div><span class="lab">${k.cas ? "スラング・慣用句" : "慣用句"}</span><div class="fam">${famHtml(k.idm)}</div></div>`:""}
               <div class="row">
+                ${dueLabel(k) ? `<span class="note" style="flex-basis:100%">次の復習（忘却曲線）: ${dueLabel(k)}</span>` : ""}
                 <span class="note">分類を変える:</span>
                 ${["ng","meh","ok","new"].map(g=>`<button class="speak" data-set="${g}">${LABEL[g]}</button>`).join("")}
               </div>
@@ -546,8 +576,9 @@ function importCode(text){
     const fields = {ja:str(x.ja), def:str(x.def), exS:str(x.exS), exR:str(x.exR), fam:str(x.fam), kind:str(x.kind), pos:str(x.pos), idm:str(x.idm), nua:str(x.nua), sense:str(x.sense), pr:str(x.pr), fun:str(x.fun), cas:str(x.cas)};
     const have = byWord.get(keyOf(w, x.sense));
     const fromBackup = m[1] === "WORDCARDS-BACKUP1" && LABEL[x.s];
-    if (have){ Object.assign(have, fields); if (fromBackup) have.s = x.s; if ((x.look||1) > looks(have)) have.look = x.look; updated++; }   // keep its review status
-    else { const k = {id:uid(), w, ...fields, s: fromBackup ? x.s : "new", n:0, t:0, look: x.look || 1}; state.cards.push(k); byWord.set(keyOf(w, x.sense), k); added++; }
+    const curve = fromBackup ? {t: +x.t || 0, lv: x.lv ?? undefined, due: +x.due || 0} : null;
+    if (have){ Object.assign(have, fields); if (fromBackup){ have.s = x.s; if (curve.t) Object.assign(have, curve); } if ((x.look||1) > looks(have)) have.look = x.look; updated++; }   // keep its review status
+    else { const k = {id:uid(), w, ...fields, s: fromBackup ? x.s : "new", n:0, t:0, look: x.look || 1, ...(curve && curve.t ? curve : {})}; state.cards.push(k); byWord.set(keyOf(w, x.sense), k); added++; }
   });
   state.pending = (state.pending || []).filter(t => { const c = byWord.get(keyOf(t, "")); return !(c && c.ja); });
   save();
@@ -562,7 +593,7 @@ function lastBackupText(){
   return `前回の保存: ${d.getMonth()+1}月${d.getDate()}日 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`;
 }
 function backupCode(){
-  return "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, fam:k.fam||"", kind:k.kind||"", pos:k.pos||"", idm:k.idm||"", nua:k.nua||"", sense:k.sense||"", pr:k.pr||"", fun:k.fun||"", cas:k.cas||"", look:looks(k), s:k.s})));
+  return "WORDCARDS-BACKUP1:" + JSON.stringify(state.cards.map(k => ({w:k.w, ja:k.ja, def:k.def, exS:k.exS, exR:k.exR, fam:k.fam||"", kind:k.kind||"", pos:k.pos||"", idm:k.idm||"", nua:k.nua||"", sense:k.sense||"", pr:k.pr||"", fun:k.fun||"", cas:k.cas||"", look:looks(k), s:k.s, t:k.t||0, lv:k.lv ?? null, due:k.due||0})));
 }
 // keep the save button's word count right after cards are loaded on this screen
 function refreshBackupBtn(){
