@@ -156,7 +156,7 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "26";
+const APP_VERSION = "27";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -217,6 +217,14 @@ function copyText(text, statusEl){
 // how many times this card has been added (looked up); every duplicate add counts once more
 const looks = k => k.look || 1;
 function bumpLook(k){ k.look = looks(k) + 1; k.lastLook = Date.now(); }
+// Searching the word list counts too: a card counts once per search, when it is opened from
+// the results or when the search box holds exactly that word for 1.5 seconds.
+// Clearing the search box starts a new search.
+let searchCounted = new Set(), searchTimer = null;
+function countSearch(k){
+  if (!k || !ui.q.trim() || searchCounted.has(k.id)) return false;
+  searchCounted.add(k.id); bumpLook(k); save(); return true;
+}
 const findCard = w => state.cards.find(c => c.w.toLowerCase() === String(w).trim().toLowerCase());
 const keyOf = (w, sense) => (String(w).trim() + "|" + String(sense || "").trim()).toLowerCase();
 const findSame = (w, sense) => state.cards.find(c => keyOf(c.w, c.sense) === keyOf(w, sense));
@@ -500,6 +508,7 @@ function renderList(listOnly){
   const html = `
     <div style="display:flex;flex-direction:column;gap:12px">
       <input type="search" id="q" placeholder="単語・意味で検索" value="${esc(ui.q)}">
+      <p class="note" style="margin:-6px 0 0">検索して開いた単語は「調べた回数」に数えます。</p>
       <div class="row" style="justify-content:space-between">
         <span class="h2">並び順</span>
         <div class="seg">
@@ -544,7 +553,14 @@ function renderList(listOnly){
     v.querySelector(".list").replaceWith(tmp.querySelector(".list"));
   } else v.innerHTML = html;
   const qi = $("#q");
-  qi.oninput = () => { ui.q = qi.value; ui.limit = 100; renderList(true); };
+  qi.oninput = () => {
+    ui.q = qi.value; ui.limit = 100; if (!ui.q.trim()) searchCounted.clear(); renderList(true);
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      const q = ui.q.trim().toLowerCase(); if (!q || ui.tab !== "list") return;
+      if (state.cards.filter(c => c.w.toLowerCase() === q).map(countSearch).some(Boolean)) renderList(true);
+    }, 1500);
+  };
   // long lists are drawn 100 words at a time so the screen stays quick as the deck grows
   if ($("#more")) $("#more").onclick = () => { ui.limit = (ui.limit || 100) + 100; renderList(true); };
   v.querySelectorAll("[data-f]").forEach(b => b.onclick = () => { ui.filter = b.dataset.f; ui.limit = 100; renderList(); });
@@ -557,6 +573,7 @@ function renderList(listOnly){
     if (t && t.hasAttribute("data-say")) return speak(k.w);
     if (t && t.hasAttribute("data-del")) return askDelete(k, () => { ui.open = null; renderList(); });
     if (e.target.closest(".detail")) return;
+    if (ui.open !== id) countSearch(k);
     ui.open = ui.open === id ? null : id; renderList();
   });
 }
