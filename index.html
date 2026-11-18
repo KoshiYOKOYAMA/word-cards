@@ -156,7 +156,7 @@ body{margin:0}
 
 <script>
 (() => {
-const APP_VERSION = "27";
+const APP_VERSION = "28";
 const ADD_URL = "https://claude.ai/artifact/FBL2F9MnaTkAg1uANKGnU8";
 const KEY = "wordcards.offline.v1";
 const LABEL = {new:"未学習", ng:"忘れた", meh:"あいまい", ok:"完璧"};
@@ -553,7 +553,16 @@ function renderList(listOnly){
     v.querySelector(".list").replaceWith(tmp.querySelector(".list"));
   } else v.innerHTML = html;
   const qi = $("#q");
-  qi.oninput = () => {
+  // Japanese (and other) keyboards build a word first and then convert it. Redrawing the list in the
+  // middle of that makes iPhone drop the conversion candidates, so the list waits until the word is fixed.
+  // (the search box survives list redraws, so these are attached only once)
+  if (!qi.dataset.ime){
+    qi.dataset.ime = "1";
+    qi.addEventListener("compositionstart", () => { ui.composing = true; });
+    qi.addEventListener("compositionend", () => { ui.composing = false; qi.oninput(); });
+  }
+  qi.oninput = e => {
+    if (ui.composing || (e && e.isComposing)) return;
     ui.q = qi.value; ui.limit = 100; if (!ui.q.trim()) searchCounted.clear(); renderList(true);
     clearTimeout(searchTimer);
     searchTimer = setTimeout(() => {
